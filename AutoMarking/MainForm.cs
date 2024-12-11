@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.Threading;
 using System.Windows.Forms;
 
 public partial class MainForm : Form
@@ -7,12 +8,15 @@ public partial class MainForm : Form
     private ComboBox? comboBoxScreens;
     private Button? btnStartCapture;
     private Button? btnStopCapture;
+    private Button? btnProcessSheet;
+
     private Label? lblStatus;
     private int selectedScreenIndex = 0;
+    private CancellationTokenSource? cancellationTokenSource;
 
     public MainForm()
     {
-        InitializeComponent(); 
+        InitializeComponent();
 
         lblStatus.Text = "Status: Idle";
 
@@ -80,30 +84,120 @@ public partial class MainForm : Form
             return;
         }
 
-        // Start live screen capture
-        LiveScreenCapture.StartLiveScreenCapture(selectedScreenIndex);
+        // Initialize cancellation token source
+        cancellationTokenSource = new CancellationTokenSource();
 
-        if (lblStatus == null)
+        // Start live screen capture in a new task
+        Task.Run(() =>
         {
-            Console.WriteLine("Status label is not initialized. Cannot start capturing.");
-            return;
-        }
+            try
+            {
+                LiveScreenCapture.StartLiveScreenCapture(selectedScreenIndex);
 
-        lblStatus.Text = "Capturing... Press 'Q' in the console to stop.";
+                Invoke(new Action(() =>
+                {
+                    lblStatus.Text = "Capturing... Press 'Stop' to halt.";
+                    btnStartCapture.Enabled = false;
+                    btnStopCapture.Enabled = true;
+                }));
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error during screen capture: {ex.Message}");
+            }
+        });
     }
 
     private void btnStopCapture_Click(object? sender, EventArgs e)
     {
-        // Stop the live screen capture
-        LiveScreenCapture.StopLiveScreenCapture();
-
-        if (lblStatus == null)
+        if (cancellationTokenSource != null)
         {
-            MessageBox.Show("Status label is not initialized.");
+            // Cancel the ongoing operation
+            cancellationTokenSource.Cancel();
+            cancellationTokenSource.Dispose();
+            cancellationTokenSource = null;
+
+            // Stop the live screen capture
+            LiveScreenCapture.StopLiveScreenCapture();
+
+            Invoke(new Action(() =>
+            {
+                lblStatus.Text = "Capture stopped.";
+                btnStartCapture.Enabled = true;
+                btnStopCapture.Enabled = false;
+            }));
+        }
+        else
+        {
+            MessageBox.Show("No active capture to stop.");
+        }
+    }
+
+    private void BtnProcessSheet_Click(object? sender, EventArgs e)
+    {
+        if (cancellationTokenSource == null)
+        {
+            MessageBox.Show("Please start capturing before processing.");
             return;
         }
 
-        lblStatus.Text = "Capture stopped.";
+        Task.Run(() => ProcessScreenCaptureWithGoogleSheet(cancellationTokenSource.Token));
+    }
+
+    public void ProcessScreenCaptureWithGoogleSheet(CancellationToken token)
+    {
+        var sheetsHelper = new GoogleSheetsHelper();
+        string spreadsheetId = "1QhI0b92LF2cnY_bay8Ds7pRcyoK0rSjCud3QzOB78dE";
+        string range = "Sheet1!A1:A"; 
+        int sheetId = 0; 
+
+        try
+        {
+            while (true)
+            {
+                token.ThrowIfCancellationRequested();
+
+                Bitmap screenshot = LiveScreenCapture.CaptureScreen(selectedScreenIndex);
+                string recognizedText = TextRecognizer.ExtractTextFromImage(screenshot);
+
+                if (!string.IsNullOrWhiteSpace(recognizedText))
+                {
+                    var lines = recognizedText.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+
+                    foreach (var line in lines)
+                    {
+                        var trimmedLine = line.Trim();
+                        var cellLocation = sheetsHelper.FindCell(spreadsheetId, range, trimmedLine);
+
+                        if (cellLocation.HasValue)
+                        {
+                            Console.WriteLine($"Text '{trimmedLine}' found in row {cellLocation.Value.Row + 1}.");
+                            sheetsHelper.UpdateCellBackground(
+                                spreadsheetId,
+                                sheetId,
+                                cellLocation.Value.Row,
+                                cellLocation.Value.Column,
+                                "#00FF00" // Green
+                            );
+                        }
+                        else
+                        {
+                            Console.WriteLine($"Text '{trimmedLine}' not found in the sheet.");
+                        }
+                    }
+                }
+
+                Thread.Sleep(1000); // Process every second
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            Console.WriteLine("Processing was canceled.");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error during processing: {ex.Message}");
+        }
     }
 
     private void InitializeComponent()
@@ -136,6 +230,7 @@ public partial class MainForm : Form
         this.btnStopCapture.Text = "Stop Capture";
         this.btnStopCapture.UseVisualStyleBackColor = true;
         this.btnStopCapture.Click += new EventHandler(btnStopCapture_Click);
+        this.btnStopCapture.Enabled = false; // Initially disabled
 
         // lblStatus
         this.lblStatus.AutoSize = true;
@@ -145,8 +240,19 @@ public partial class MainForm : Form
         this.lblStatus.TabIndex = 3;
         this.lblStatus.Text = "Status: Idle";
 
+        // btnProcessSheet
+        this.btnProcessSheet = new Button();
+        this.btnProcessSheet.Location = new Point(105, 95); // Adjusted position
+        this.btnProcessSheet.Name = "btnProcessSheet";
+        this.btnProcessSheet.Size = new Size(75, 23);
+        this.btnProcessSheet.TabIndex = 4;
+        this.btnProcessSheet.Text = "Process";
+        this.btnProcessSheet.UseVisualStyleBackColor = true;
+        this.btnProcessSheet.Click += new EventHandler(BtnProcessSheet_Click);
+
         // MainForm
-        this.ClientSize = new Size(284, 101);
+        this.ClientSize = new Size(284, 130);
+        this.Controls.Add(this.btnProcessSheet);
         this.Controls.Add(this.lblStatus);
         this.Controls.Add(this.btnStopCapture);
         this.Controls.Add(this.btnStartCapture);

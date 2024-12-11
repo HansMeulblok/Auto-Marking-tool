@@ -22,9 +22,7 @@ public class LiveScreenCapture
 
                 Console.WriteLine("Captured screen at: " + DateTime.Now);
 
-                // You can save the screenshot or process it here
-
-                Thread.Sleep(1000); // capture every second
+                Thread.Sleep(1000); 
             }
         });
 

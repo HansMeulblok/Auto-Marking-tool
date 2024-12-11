@@ -8,10 +8,11 @@ namespace AutoMarking
         [STAThread]
         static void Main()
         {
-            // Set up the application environment and start the form
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new MainForm()); 
         }
+
+        
     }
 }

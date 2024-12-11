@@ -1,0 +1,43 @@
+# User-specific files
+.idea/
+.vscode/
+.vs2019/
+.vs2017/
+.vs/
+
+# Build results
+bin/
+obj/
+[Dd]ebug*/
+[Rr]elease*/
+
+# Windows Installer files
+*.cab
+*.msi
+*.msm
+*.msp
+
+# Windows Installer logs
+*.log
+
+# Windows image file caches
+Thumbs.db
+Desktop.ini
+
+# Windows Installer cache
+$RECYCLE.BIN/
+
+# User-specific files
+*.user
+*.suo
+
+# .NET Core files
+project.lock.json
+project.fragment.lock.json
+
+# ASP.NET Scaffolding
+ScaffoldingReadMe.txt
+
+# training data
+tessdata-main/
+
